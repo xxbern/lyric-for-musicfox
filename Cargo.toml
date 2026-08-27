@@ -1,0 +1,85 @@
+[package]
+name = "lyric-for-musicfox"
+version = "0.2.0"
+edition = "2021"
+description = "桌面歌词叠加应用"
+license = "MIT"
+
+[lib]
+name = "lyric_for_musicfox"
+path = "src/lib.rs"
+
+[[bin]]
+name = "lyric-for-musicfox"
+path = "src/main.rs"
+
+[[bin]]
+name = "mock_udp_sender"
+path = "src/bin/mock_udp_sender.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+thiserror = "1"
+dirs = "5"
+log = "0.4"
+crossbeam-channel = "0.5"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+rfd = "0.15"
+
+# 方案③：歌词窗 Slint。默认 femtovg 保证本地可编译；
+# Windows 发布构建启用 --features skia 并设 SLINT_BACKEND=winit-skia-software
+slint = { version = "1", default-features = false, features = [
+    "compat-1-2",
+    "std",
+    "backend-winit",
+    "renderer-femtovg",
+    "raw-window-handle-06",
+] }
+raw-window-handle = "0.6"
+
+[features]
+default = []
+skia = ["slint/renderer-skia"]
+
+[target.'cfg(windows)'.dependencies]
+tray-icon = "0.19"
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_Security",
+
+    # 提前声明，为 settings 的会话 ID / P4 pipe & activation 接入保留；
+    # P1 实现不得创建 presence/reload/pos 服务端。
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Accessibility",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_Pipes",
+    "Win32_System_IO",
+    "Win32_Graphics_Gdi",
+    # ProcessIdToSessionId（pos 客户端会话化管道名）
+    "Win32_System_RemoteDesktop",
+    "Win32_System_Registry",
+    # CreateFileW / ReadFile / WriteFile（pos 客户端一次性查询）
+    "Win32_Storage_FileSystem",
+    # GetProcessMemoryInfo（内存自诊断打点）
+    "Win32_System_ProcessStatus",
+] }
+
+[build-dependencies]
+embed-resource = "3"
+slint-build = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 16
+incremental = true
+panic = "unwind"
+strip = true

@@ -1,0 +1,172 @@
+// 歌词悬浮窗
+// 透明 / 无边框 / 置顶；单行文本 + 8 向偏移描边 + 跑马灯滚动。
+// 滚动 offset、颜色 alpha 等由 Rust 侧属性驱动。
+
+export component LyricWindow inherits Window {
+    no-frame: true;
+    background: transparent;
+    always-on-top: true;
+    title: "lyric-for-musicfox";
+
+    // —— 隐形测量元素：取文本自然宽度供 Rust 滚动状态机使用 ——
+    measure := Text {
+        visible: false;
+        text: "......";
+        font-size: 24px;
+        width: self.preferred-width;
+        height: self.preferred-height;
+    }
+
+    // —— Rust 侧驱动的属性 ——
+    in-out property <string> lyric-text;
+    in-out property <length> font-size-px;
+    in-out property <string> font-family-name;
+    in-out property <int> font-weight;
+    in-out property <brush> text-color;
+    in-out property <brush> outline-color;
+    in-out property <int> outline-width-px;
+    in-out property <length> offset-x;
+    out property <length> lyric-text-width: measure.width;
+
+    property <length> outline-w: outline-width-px * 1px;
+
+    // 双向绑定到测量元素（声明在属性之后以同序解析）
+    lyric-text <=> measure.text;
+    font-size-px <=> measure.font-size;
+    font-family-name <=> measure.font-family;
+
+    property <bool> scrolling: measure.width > root.width;
+    // 滚动时从 offset-x 出发，静止时居中
+    property <length> base-x: root.scrolling ? root.offset-x : (root.width - measure.width) / 2;
+    property <length> base-y: (root.height - measure.height) / 2;
+    out property <bool> has-outline: outline-width-px > 0 && root.outline-color != #00000000;
+
+    callback pointer-pressed();
+    callback pointer-released();
+
+    // —— 8 向偏移描边 ——
+    Text {
+        text: root.lyric-text;
+        font-size: root.font-size-px;
+        font-family: root.font-family-name;
+        font-weight: root.font-weight;
+        color: root.outline-color;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        visible: root.has-outline;
+        x: root.base-x + root.outline-w;
+        y: root.base-y;
+    }
+    Text {
+        text: root.lyric-text;
+        font-size: root.font-size-px;
+        font-family: root.font-family-name;
+        font-weight: root.font-weight;
+        color: root.outline-color;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        visible: root.has-outline;
+        x: root.base-x - root.outline-w;
+        y: root.base-y;
+    }
+    Text {
+        text: root.lyric-text;
+        font-size: root.font-size-px;
+        font-family: root.font-family-name;
+        font-weight: root.font-weight;
+        color: root.outline-color;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        visible: root.has-outline;
+        x: root.base-x;
+        y: root.base-y + root.outline-w;
+    }
+    Text {
+        text: root.lyric-text;
+        font-size: root.font-size-px;
+        font-family: root.font-family-name;
+        font-weight: root.font-weight;
+        color: root.outline-color;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        visible: root.has-outline;
+        x: root.base-x;
+        y: root.base-y - root.outline-w;
+    }
+    Text {
+        text: root.lyric-text;
+        font-size: root.font-size-px;
+        font-family: root.font-family-name;
+        font-weight: root.font-weight;
+        color: root.outline-color;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        visible: root.has-outline;
+        x: root.base-x + root.outline-w;
+        y: root.base-y + root.outline-w;
+    }
+    Text {
+        text: root.lyric-text;
+        font-size: root.font-size-px;
+        font-family: root.font-family-name;
+        font-weight: root.font-weight;
+        color: root.outline-color;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        visible: root.has-outline;
+        x: root.base-x + root.outline-w;
+        y: root.base-y - root.outline-w;
+    }
+    Text {
+        text: root.lyric-text;
+        font-size: root.font-size-px;
+        font-family: root.font-family-name;
+        font-weight: root.font-weight;
+        color: root.outline-color;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        visible: root.has-outline;
+        x: root.base-x - root.outline-w;
+        y: root.base-y + root.outline-w;
+    }
+    Text {
+        text: root.lyric-text;
+        font-size: root.font-size-px;
+        font-family: root.font-family-name;
+        font-weight: root.font-weight;
+        color: root.outline-color;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        visible: root.has-outline;
+        x: root.base-x - root.outline-w;
+        y: root.base-y - root.outline-w;
+    }
+
+    // —— 主文本 + 拖拽输入 ——
+    txt := Text {
+        text: root.lyric-text;
+        font-size: root.font-size-px;
+        font-family: root.font-family-name;
+        font-weight: root.font-weight;
+        color: root.text-color;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        x: root.base-x;
+        y: root.base-y;
+
+        TouchArea {
+            // 仅解锁（非穿透）时收到事件；locked 由 OS 层 WS_EX_TRANSPARENT 保证
+            property <bool> left-down;
+            pointer-event(e) => {
+                if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                    self.left-down = true;
+                    root.pointer-pressed();
+                } else if (e.kind == PointerEventKind.up && e.button == PointerEventButton.left) {
+                    if (self.left-down) { root.pointer-released(); }
+                    self.left-down = false;
+                }
+            }
+        }
+    }
+
+}

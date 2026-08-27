@@ -1,0 +1,191 @@
+diff --git a/internal/ui/player.go b/internal/ui/player.go
+index 04590dc7..a5043e67 100644
+--- a/internal/ui/player.go
++++ b/internal/ui/player.go
+@@ -2,8 +2,10 @@ package ui
+ 
+ import (
+ 	"context"
++	"encoding/json"
+ 	"fmt"
+ 	"log/slog"
++	"net"
+ 	"strconv"
+ 	"time"
+ 
+@@ -11,6 +13,7 @@ import (
+ 	"github.com/go-musicfox/netease-music/service"
+ 
+ 	"github.com/go-musicfox/go-musicfox/internal/configs"
++	"github.com/go-musicfox/go-musicfox/internal/desktop_lyrics"
+ 	"github.com/go-musicfox/go-musicfox/internal/lyric"
+ 	"github.com/go-musicfox/go-musicfox/internal/player"
+ 	"github.com/go-musicfox/go-musicfox/internal/playlist"
+@@ -21,6 +24,7 @@ import (
+ 	"github.com/go-musicfox/go-musicfox/internal/types"
+ 	"github.com/go-musicfox/go-musicfox/utils/app"
+ 	"github.com/go-musicfox/go-musicfox/utils/errorx"
++	"github.com/go-musicfox/go-musicfox/utils/likelist"
+ 	"github.com/go-musicfox/go-musicfox/utils/netease"
+ 	"github.com/go-musicfox/go-musicfox/utils/notify"
+ 	_struct "github.com/go-musicfox/go-musicfox/utils/struct"
+@@ -127,6 +131,11 @@ func NewPlayer(n *Netease, lyricService *lyric.Service) *Player {
+ 		}
+ 	})
+ 
++	// UDP 远程控制监听 (端口 16502)
++	errorx.WaitGoStart(func() {
++		startUdpCommandListener(p)
++	})
++
+ 	// 状态监听
+ 	errorx.WaitGoStart(func() {
+ 		for {
+@@ -694,8 +703,11 @@ func (p *Player) updateDesktopLyrics() {
+ 
+ 	state := p.State()
+ 	curLine, nextLine, currentIndex := p.netease.GetDesktopLyricsLines()
+-	hasContent := curLine.Text != "" || len(curLine.Words) > 0
+ 	currentTimeMs := p.PassedTime().Milliseconds()
++
++	sendRichLyricByUdp(16501, p, state, curLine, nextLine, currentTimeMs)
++
++	hasContent := curLine.Text != "" || len(curLine.Words) > 0
+ 	if configs.AppConfig.Main.Lyric.DesktopLyrics.HideOnPause && state == types.Paused {
+ 		dl.Update(curLine, nextLine, currentIndex, currentTimeMs, false)
+ 		dl.Hide()
+@@ -733,3 +745,134 @@ func (p *Player) updateDesktopLyrics() {
+ 		}
+ 	}
+ }
++
++type UdpLyricWord struct {
++	Word      string `json:"word"`
++	StartTime int64  `json:"start_time"`
++	Duration  int64  `json:"duration"`
++}
++
++type UdpLyricPayload struct {
++	Type        string               `json:"type"`
++	Playing     bool                 `json:"playing"`
++	TimeMs      int64                `json:"time_ms"`
++	Volume      int                  `json:"volume"`
++	Mode        string               `json:"mode"`
++	Song        UdpSongInfo          `json:"song"`
++	CurrentLine UdpLineInfo          `json:"current_line"`
++	NextLine    UdpLineInfo          `json:"next_line"`
++}
++
++type UdpSongInfo struct {
++	ID         int64  `json:"id"`
++	Name       string `json:"name"`
++	Artist     string `json:"artist"`
++	Album      string `json:"album"`
++	PicUrl     string `json:"pic_url"`
++	Duration   int64  `json:"duration"`
++	IsFavorite bool   `json:"is_favorite"`
++}
++
++type UdpLineInfo struct {
++	Text  string         `json:"text"`
++	Words []UdpLyricWord `json:"words,omitempty"`
++}
++
++var lastUdpConn net.Conn
++
++func sendRichLyricByUdp(port int, p *Player, state types.State, curLine, nextLine desktop_lyrics.LyricLine, timeMs int64) {
++	curSong := p.CurSong()
++	isFav := false
++	if curSong.Id > 0 {
++		isFav = likelist.IsLikeSong(curSong.Id)
++	}
++	payload := UdpLyricPayload{
++		Type:    "lyric_update",
++		Playing: state == types.Playing,
++		TimeMs:  timeMs,
++		Volume:  p.Volume(),
++		Mode:    p.Mode().String(),
++		Song: UdpSongInfo{
++			ID:         curSong.Id,
++			Name:       curSong.Name,
++			Artist:     curSong.ArtistName(),
++			Album:      curSong.Album.Name,
++			PicUrl:     curSong.PicUrl,
++			Duration:   curSong.Duration.Milliseconds(),
++			IsFavorite: isFav,
++		},
++		CurrentLine: UdpLineInfo{Text: curLine.Text},
++		NextLine:    UdpLineInfo{Text: nextLine.Text},
++	}
++	for _, w := range curLine.Words {
++		payload.CurrentLine.Words = append(payload.CurrentLine.Words, UdpLyricWord{
++			Word:      w.Word,
++			StartTime: int64(w.StartTime),
++			Duration:  int64(w.EndTime - w.StartTime),
++		})
++	}
++	data, err := json.Marshal(payload)
++	if err != nil {
++		return
++	}
++	if lastUdpConn == nil {
++		conn, err := net.Dial("udp", fmt.Sprintf("127.0.0.1:%d", port))
++		if err != nil {
++			return
++		}
++		lastUdpConn = conn
++	}
++	_, _ = lastUdpConn.Write(data)
++}
++
++type UdpCommand struct {
++	Command string `json:"command"`
++	Value   int64  `json:"value"`
++}
++
++func startUdpCommandListener(p *Player) {
++	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:16502")
++	if err != nil {
++		return
++	}
++	conn, err := net.ListenUDP("udp", addr)
++	if err != nil {
++		return
++	}
++	defer conn.Close()
++
++	buf := make([]byte, 1024)
++	for {
++		n, _, err := conn.ReadFromUDP(buf)
++		if err != nil {
++			return
++		}
++		var cmd UdpCommand
++		if err := json.Unmarshal(buf[:n], &cmd); err != nil {
++			continue
++		}
++		switch cmd.Command {
++		case "toggle":
++			p.CtrlToggle()
++		case "next":
++			p.CtrlNext()
++		case "previous":
++			p.CtrlPrevious()
++		case "like":
++			isFav := false
++			if curSong := p.CurSong(); curSong.Id > 0 {
++				isFav = likelist.IsLikeSong(curSong.Id)
++			}
++			if isFav {
++				p.CtrlDislikeNowPlaying()
++			} else {
++				p.CtrlLikeNowPlaying()
++			}
++		case "volume":
++			p.CtrlSetVolume(int(cmd.Value))
++		case "seek":
++			p.CtrlSeek(time.Duration(cmd.Value) * time.Millisecond)
++		}
++	}
++}
++

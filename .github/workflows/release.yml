@@ -1,0 +1,111 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-lyric:
+    name: Build & Release lyric-for-musicfox (Windows x86_64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build Release Binaries
+        shell: bash
+        run: |
+          cargo build --release --features skia
+          cargo build --release --bin mock_udp_sender
+
+      - name: Package Artifacts
+        shell: pwsh
+        run: |
+          $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { 'latest' }
+          $pkgDir = "lyric-for-musicfox-$tag-windows-x86_64"
+          New-Item -ItemType Directory -Path $pkgDir -Force
+
+          Copy-Item "target/release/lyric-for-musicfox.exe" -Destination "$pkgDir/"
+          Copy-Item "target/release/mock_udp_sender.exe" -Destination "$pkgDir/"
+          Copy-Item "README.md" -Destination "$pkgDir/"
+          Copy-Item "LICENSE" -Destination "$pkgDir/"
+
+          $zipName = "lyric-for-musicfox-$tag-windows-x86_64.zip"
+          Compress-Archive -Path "$pkgDir/*" -DestinationPath $zipName -Force
+
+          $hash = (Get-FileHash -Path $zipName -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zipName" | Out-File -FilePath "SHA256SUMS-lyric.txt" -Encoding utf8
+
+      - name: Upload lyric-for-musicfox to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            lyric-for-musicfox-*-windows-x86_64.zip
+            target/release/lyric-for-musicfox.exe
+            SHA256SUMS-lyric.txt
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+
+  build-musicfox:
+    name: Build & Release Patched go-musicfox (Windows x86_64)
+    runs-on: ubuntu-latest
+    env:
+      MUSICFOX_TAG: 'v5.0.2'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Install MinGW cross-compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-x86-64 zip
+
+      - name: Clone, Checkout Tag and Patch go-musicfox
+        run: |
+          git clone https://github.com/go-musicfox/go-musicfox.git go-musicfox
+          cd go-musicfox
+          git checkout "${MUSICFOX_TAG}"
+          git apply ../musicfox-patch/lyric_udp.patch
+          APP_VERSION="${MUSICFOX_TAG}"
+          echo "APP_VERSION=${APP_VERSION}" >> $GITHUB_ENV
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc \
+            go build -ldflags "-s -w -X github.com/go-musicfox/go-musicfox/internal/types.AppVersion=${APP_VERSION}" \
+            -o ../musicfox.exe ./cmd/musicfox.go
+
+      - name: Package musicfox Artifacts
+        run: |
+          ZIP_NAME="musicfox-${APP_VERSION}-udp-lyric-windows-x86_64.zip"
+          zip "${ZIP_NAME}" musicfox.exe
+          sha256sum "${ZIP_NAME}" > SHA256SUMS-musicfox.txt
+          echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
+
+      - name: Upload musicfox to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.ZIP_NAME }}
+            musicfox.exe
+            SHA256SUMS-musicfox.txt
+          draft: false
+          prerelease: false

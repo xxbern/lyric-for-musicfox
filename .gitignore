@@ -1,0 +1,21 @@
+# Rust compilation output
+/target/
+
+# Ignore the cloned go-musicfox repo if placed here for patching
+/musicfox-patch/go-musicfox/
+
+# Local tool caches (per-machine)
+/.cargo/
+/.pi/
+/.serena/
+
+# IDE and OS files
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# runtime diagnostics
+mem_diag.csv
+crash.log
+log.txt

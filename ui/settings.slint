@@ -1,0 +1,832 @@
+// 设置窗口（Slint，现代化卡片布局）
+// 表单状态由 Rust 侧 FormState 持有；UI 变更经 changed() 回调整体回拉。
+
+import { CheckBox, ComboBox, Slider } from "std-widgets.slint";
+
+// —— 无 ❌ 清除按钮的纯净文本输入框 ——
+component CleanInput inherits Rectangle {
+    in-out property <string> text <=> input.text;
+    in-out property <string> placeholder-text: "";
+    in-out property <bool> enabled: true;
+    in-out property <bool> read-only: false;
+    in-out property <length> font-size: 12px;
+    in-out property <TextHorizontalAlignment> horizontal-alignment: left;
+
+    callback edited(string);
+    callback accepted(string);
+
+    forward-focus: input;
+
+    horizontal-stretch: 1;
+    min-width: 0px;
+    height: 28px;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: input.has-focus ? #2563eb : #cbd5e1;
+    background: root.read-only || !root.enabled ? #f8fafc : #ffffff;
+    clip: true;
+
+    Rectangle {
+        x: 8px;
+        y: 0px;
+        width: max(0px, parent.width - 16px);
+        height: parent.height;
+        clip: true;
+
+        if root.text == "" && root.placeholder-text != "" : Text {
+            width: 100%;
+            height: 100%;
+            text: root.placeholder-text;
+            color: #94a3b8;
+            font-size: root.font-size;
+            vertical-alignment: center;
+            horizontal-alignment: root.horizontal-alignment;
+            overflow: elide;
+        }
+
+        input := TextInput {
+            property <length> computed-x;
+
+            x: min(0px, max(parent.width - self.width - self.text-cursor-width, self.computed-x));
+            width: max(parent.width - self.text-cursor-width, self.preferred-width);
+            height: 100%;
+            font-size: root.font-size;
+            color: root.read-only || !root.enabled ? #64748b : #0f172a;
+            selection-background-color: #bfdbfe;
+            selection-foreground-color: #1e3a8a;
+            single-line: true;
+            vertical-alignment: center;
+            horizontal-alignment: root.horizontal-alignment;
+            read-only: root.read-only;
+            enabled: root.enabled;
+
+            cursor-position-changed(cursor-position) => {
+                if cursor-position.x + self.computed-x < 0px {
+                    self.computed-x = - cursor-position.x;
+                } else if cursor-position.x + self.computed-x > parent.width - self.text-cursor-width {
+                    self.computed-x = parent.width - cursor-position.x - self.text-cursor-width;
+                }
+            }
+
+            edited => {
+                root.edited(self.text);
+            }
+            accepted => {
+                root.accepted(self.text);
+            }
+        }
+    }
+}
+
+// —— 现代方形桌面按钮 ——
+component AppButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary: false;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    horizontal-stretch: 0;
+    min-width: max(56px, btn-text.preferred-width + 20px);
+    height: 28px;
+    border-radius: 4px;
+    border-width: 1px;
+
+    background: !root.enabled ? #f1f5f9 : (
+        root.primary ? (
+            ta.pressed ? #1d4ed8 : (ta.has-hover ? #1e40af : #2563eb)
+        ) : (
+            ta.pressed ? #e2e8f0 : (ta.has-hover ? #f8fafc : #ffffff)
+        )
+    );
+    border-color: !root.enabled ? #e2e8f0 : (
+        root.primary ? #1d4ed8 : (ta.has-hover ? #cbd5e1 : #d1d5db)
+    );
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        alignment: center;
+
+        btn-text := Text {
+            text: root.text;
+            font-size: 12px;
+            font-weight: root.primary ? 600 : 500;
+            color: !root.enabled ? #94a3b8 : (
+                root.primary ? #ffffff : #1f2937
+            );
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+// —— 侧边栏导航条目组件 ——
+component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected;
+    callback clicked();
+
+    height: 40px;
+    background: selected ? #eff6ff : (ta.has-hover ? #f8fafc : transparent);
+    border-radius: 4px;
+
+    // 左侧蓝色指示条
+    Rectangle {
+        x: 0;
+        y: 8px;
+        width: 3px;
+        height: parent.height - 16px;
+        background: #2563eb;
+        border-radius: 1.5px;
+        visible: selected;
+    }
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 12px;
+        alignment: start;
+
+        Text {
+            text: label;
+            font-size: 13px;
+            font-weight: selected ? 600 : 500;
+            color: selected ? #1d4ed8 : (ta.has-hover ? #0f172a : #475569);
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+export component SettingsWindow inherits Window {
+    title: "lyric-for-musicfox - 设置";
+    width: 530px;
+    height: 590px;
+    background: #f8fafc;
+
+    // —— 当前侧边栏导航（0=窗口 1=样式 2=系统 3=go-musicfox）——
+    in-out property <int> nav-index: 0;
+
+    // —— 表单属性（Rust 双向同步）——
+    in-out property <string> win-width-text;
+    in-out property <string> win-height-text;
+    in-out property <string> pos-x-text;
+    in-out property <string> pos-y-text;
+    in-out property <bool> stay-on-top;
+    in-out property <bool> locked;
+    in-out property <float> font-size-pt;
+    in-out property <bool> font-bold;
+    in-out property <bool> font-italic;
+    in-out property <string> font-color-text;
+    in-out property <bool> outline-enabled;
+    in-out property <string> outline-color-text;
+    in-out property <string> outline-width-text;
+    in-out property <string> recv-port-text;
+    in-out property <string> send-port-text;
+    in-out property <bool> log-enabled;
+
+    in-out property <[string]> font-model;
+    in-out property <int> font-current-index;
+    in-out property <string> font-current-value;
+
+    // 预览刷子（Rust 侧解析 hex 后回填，UI 不直接解析）
+    in-out property <brush> preview-text-color;
+    in-out property <brush> preview-outline-color;
+    in-out property <int> preview-outline-width;
+
+    // go-musicfox 配置（P4）
+    in-out property <string> wt-musicfox-path-text;
+    in-out property <string> musicfox-data-dir-hint;
+
+    // —— 提示 / 错误 / 模态 ——
+    in-out property <string> save-error;
+    in-out property <bool> show-toast;
+    in-out property <string> toast-text;
+    in-out property <bool> pos-stale;
+    in-out property <bool> show-parse-modal;
+    in-out property <string> parse-error;
+    in-out property <bool> show-close-modal;
+
+    callback changed();
+    callback save-clicked();
+    callback open-config-clicked();
+    callback browse-musicfox-clicked();
+    callback open-musicfox-data-clicked();
+    callback font-selected(int);
+    callback parse-reset-clicked();
+    callback parse-cancel-clicked();
+    callback close-save-clicked();
+    callback close-discard-clicked();
+    callback close-cancel-clicked();
+
+    HorizontalLayout {
+        spacing: 0;
+
+        // ============== 左侧侧边栏 ==============
+        Rectangle {
+            width: 136px;
+            background: #ffffff;
+            border-width: 1px;
+            border-color: #e2e8f0;
+
+            VerticalLayout {
+                padding-top: 16px;
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 4px;
+
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-bottom: 12px;
+                    Text {
+                        text: "设置";
+                        font-size: 15px;
+                        font-weight: 700;
+                        color: #0f172a;
+                        vertical-alignment: center;
+                    }
+                }
+
+                NavItem {
+                    label: "窗口与定位";
+                    selected: root.nav-index == 0;
+                    clicked => { root.nav-index = 0; }
+                }
+                NavItem {
+                    label: "歌词与样式";
+                    selected: root.nav-index == 1;
+                    clicked => { root.nav-index = 1; }
+                }
+                NavItem {
+                    label: "系统与网络";
+                    selected: root.nav-index == 2;
+                    clicked => { root.nav-index = 2; }
+                }
+                NavItem {
+                    label: "go-musicfox";
+                    selected: root.nav-index == 3;
+                    clicked => { root.nav-index = 3; }
+                }
+
+                Rectangle { vertical-stretch: 1; }
+            }
+        }
+
+        // ============== 右侧内容区 ==============
+        Rectangle {
+            horizontal-stretch: 1;
+
+            VerticalLayout {
+                padding: 14px;
+                spacing: 12px;
+
+                // 内容区卡片容器
+                Rectangle {
+                    vertical-stretch: 1;
+                    clip: true;
+
+                    // —— 窗口与定位 面板 ——
+                    Rectangle {
+                        visible: root.nav-index == 0;
+                        background: #ffffff;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: #e2e8f0;
+                        x: 0;
+                        y: 0;
+                        width: parent.width;
+                        height: parent.height;
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 12px;
+
+                            VerticalLayout {
+                                spacing: 2px;
+                                Text {
+                                    text: "窗口与定位";
+                                    font-size: 14px;
+                                    font-weight: 700;
+                                    color: #0f172a;
+                                }
+                                Text {
+                                    text: "调整悬浮窗尺寸、屏幕坐标与交互锁定状态";
+                                    font-size: 11px;
+                                    color: #64748b;
+                                }
+                            }
+
+                            Rectangle { height: 1px; background: #f1f5f9; }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Text { text: "窗口尺寸"; vertical-alignment: center; width: 84px; color: #334155; font-weight: 500; font-size: 12px; }
+                                Text { text: "宽"; vertical-alignment: center; color: #64748b; font-size: 11px; }
+                                CleanInput { width: 80px; font-size: 12px; text <=> root.win-width-text; edited => { root.changed(); } placeholder-text: "100-4000"; }
+                                Text { text: "高"; vertical-alignment: center; color: #64748b; font-size: 11px; }
+                                CleanInput { width: 80px; font-size: 12px; text <=> root.win-height-text; edited => { root.changed(); } placeholder-text: "20-500"; }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Text { text: "窗口位置"; vertical-alignment: center; width: 84px; color: #334155; font-weight: 500; font-size: 12px; }
+                                Text { text: "X"; vertical-alignment: center; color: #64748b; font-size: 11px; }
+                                CleanInput { width: 80px; font-size: 12px; text <=> root.pos-x-text; edited => { root.changed(); } }
+                                Text { text: "Y"; vertical-alignment: center; color: #64748b; font-size: 11px; }
+                                CleanInput { width: 80px; font-size: 12px; text <=> root.pos-y-text; edited => { root.changed(); } }
+                            }
+
+                            if root.pos-stale : Text {
+                                text: "上次磁盘保存值，主进程未运行";
+                                color: #94a3b8;
+                                font-size: 11px;
+                            }
+
+                            HorizontalLayout {
+                                spacing: 16px;
+                                Text { text: "窗口属性"; vertical-alignment: center; width: 84px; color: #334155; font-weight: 500; font-size: 12px; }
+                                CheckBox { text: "始终置顶"; checked <=> root.stay-on-top; toggled => { root.changed(); } }
+                                CheckBox { text: "锁定位置"; checked <=> root.locked; toggled => { root.changed(); } }
+                            }
+
+                            Rectangle { vertical-stretch: 1; }
+                        }
+                    }
+
+                    // —— 歌词与样式 面板（含实时预览）——
+                    Rectangle {
+                        visible: root.nav-index == 1;
+                        background: #ffffff;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: #e2e8f0;
+                        x: 0;
+                        y: 0;
+                        width: parent.width;
+                        height: parent.height;
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 10px;
+
+                            VerticalLayout {
+                                spacing: 2px;
+                                Text {
+                                    text: "歌词与样式";
+                                    font-size: 14px;
+                                    font-weight: 700;
+                                    color: #0f172a;
+                                }
+                                Text {
+                                    text: "自定义字体族、字号、颜色及描边效果";
+                                    font-size: 11px;
+                                    color: #64748b;
+                                }
+                            }
+
+                            Rectangle { height: 1px; background: #f1f5f9; }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Text { text: "字体家族"; vertical-alignment: center; width: 84px; color: #334155; font-weight: 500; font-size: 12px; }
+                                ComboBox {
+                                    model: root.font-model;
+                                    current-index <=> root.font-current-index;
+                                    current-value <=> root.font-current-value;
+                                    selected => { root.font-selected(self.current-index); root.changed(); }
+                                    horizontal-stretch: 1;
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Text { text: "字体大小"; vertical-alignment: center; width: 84px; color: #334155; font-weight: 500; font-size: 12px; }
+                                Slider {
+                                    minimum: 6; maximum: 200;
+                                    value <=> root.font-size-pt;
+                                    changed => { root.changed(); }
+                                    horizontal-stretch: 1;
+                                }
+                                Text { text: round(root.font-size-pt) + " pt"; vertical-alignment: center; width: 56px; color: #64748b; font-size: 11px; }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 16px;
+                                Text { text: "样式修饰"; vertical-alignment: center; width: 84px; color: #334155; font-weight: 500; font-size: 12px; }
+                                CheckBox { text: "加粗"; checked <=> root.font-bold; toggled => { root.changed(); } }
+                                CheckBox { text: "斜体"; checked <=> root.font-italic; toggled => { root.changed(); } }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Text { text: "字体颜色"; vertical-alignment: center; width: 84px; color: #334155; font-weight: 500; font-size: 12px; }
+                                CleanInput { font-size: 12px; text <=> root.font-color-text; edited => { root.changed(); } placeholder-text: "#RRGGBB"; horizontal-stretch: 1; }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 16px;
+                                Text { text: "文字描边"; vertical-alignment: center; width: 84px; color: #334155; font-weight: 500; font-size: 12px; }
+                                CheckBox { text: "启用描边"; checked <=> root.outline-enabled; toggled => { root.changed(); } }
+                            }
+
+                            if root.outline-enabled : VerticalLayout {
+                                spacing: 8px;
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    Text { text: "描边颜色"; vertical-alignment: center; width: 84px; color: #334155; font-weight: 500; font-size: 12px; }
+                                    CleanInput { font-size: 12px; text <=> root.outline-color-text; edited => { root.changed(); } placeholder-text: "#RRGGBB"; horizontal-stretch: 1; }
+                                }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    Text { text: "描边宽度"; vertical-alignment: center; width: 84px; color: #334155; font-weight: 500; font-size: 12px; }
+                                    CleanInput { width: 80px; font-size: 12px; text <=> root.outline-width-text; edited => { root.changed(); } placeholder-text: "0-16"; }
+                                }
+                            }
+
+                            // —— 样式实时预览 ——
+                            VerticalLayout {
+                                spacing: 4px;
+                                Text {
+                                    text: "效果预览";
+                                    color: #64748b;
+                                    font-size: 11px;
+                                    font-weight: 500;
+                                }
+                                Rectangle {
+                                    height: 64px;
+                                    background: #d4dce7;
+                                    border-radius: 6px;
+                                    clip: true;
+                                    property <length> cx: (self.width - preview-text.preferred-width) / 2;
+                                    property <length> cy: (self.height - preview-text.preferred-height) / 2;
+
+                                    preview-o0 := Text {
+                                        visible: root.outline-enabled && root.preview-outline-width > 0;
+                                        text: "天青色等烟雨";
+                                        font-size: root.font-size-pt * 1pt;
+                                        font-family: root.font-current-value;
+                                        font-weight: root.font-bold ? 700 : 400;
+                                        color: root.preview-outline-color;
+                                        x: parent.cx;
+                                        y: parent.cy + root.preview-outline-width * 1px;
+                                    }
+                                    preview-o1 := Text {
+                                        visible: root.outline-enabled && root.preview-outline-width > 0;
+                                        text: "天青色等烟雨";
+                                        font-size: root.font-size-pt * 1pt;
+                                        font-family: root.font-current-value;
+                                        font-weight: root.font-bold ? 700 : 400;
+                                        color: root.preview-outline-color;
+                                        x: parent.cx;
+                                        y: parent.cy - root.preview-outline-width * 1px;
+                                    }
+                                    preview-o2 := Text {
+                                        visible: root.outline-enabled && root.preview-outline-width > 0;
+                                        text: "天青色等烟雨";
+                                        font-size: root.font-size-pt * 1pt;
+                                        font-family: root.font-current-value;
+                                        font-weight: root.font-bold ? 700 : 400;
+                                        color: root.preview-outline-color;
+                                        x: parent.cx + root.preview-outline-width * 1px;
+                                        y: parent.cy;
+                                    }
+                                    preview-o3 := Text {
+                                        visible: root.outline-enabled && root.preview-outline-width > 0;
+                                        text: "天青色等烟雨";
+                                        font-size: root.font-size-pt * 1pt;
+                                        font-family: root.font-current-value;
+                                        font-weight: root.font-bold ? 700 : 400;
+                                        color: root.preview-outline-color;
+                                        x: parent.cx - root.preview-outline-width * 1px;
+                                        y: parent.cy;
+                                    }
+                                    preview-o4 := Text {
+                                        visible: root.outline-enabled && root.preview-outline-width > 0;
+                                        text: "天青色等烟雨";
+                                        font-size: root.font-size-pt * 1pt;
+                                        font-family: root.font-current-value;
+                                        font-weight: root.font-bold ? 700 : 400;
+                                        color: root.preview-outline-color;
+                                        x: parent.cx + root.preview-outline-width * 1px;
+                                        y: parent.cy + root.preview-outline-width * 1px;
+                                    }
+                                    preview-o5 := Text {
+                                        visible: root.outline-enabled && root.preview-outline-width > 0;
+                                        text: "天青色等烟雨";
+                                        font-size: root.font-size-pt * 1pt;
+                                        font-family: root.font-current-value;
+                                        font-weight: root.font-bold ? 700 : 400;
+                                        color: root.preview-outline-color;
+                                        x: parent.cx + root.preview-outline-width * 1px;
+                                        y: parent.cy - root.preview-outline-width * 1px;
+                                    }
+                                    preview-o6 := Text {
+                                        visible: root.outline-enabled && root.preview-outline-width > 0;
+                                        text: "天青色等烟雨";
+                                        font-size: root.font-size-pt * 1pt;
+                                        font-family: root.font-current-value;
+                                        font-weight: root.font-bold ? 700 : 400;
+                                        color: root.preview-outline-color;
+                                        x: parent.cx - root.preview-outline-width * 1px;
+                                        y: parent.cy + root.preview-outline-width * 1px;
+                                    }
+                                    preview-o7 := Text {
+                                        visible: root.outline-enabled && root.preview-outline-width > 0;
+                                        text: "天青色等烟雨";
+                                        font-size: root.font-size-pt * 1pt;
+                                        font-family: root.font-current-value;
+                                        font-weight: root.font-bold ? 700 : 400;
+                                        color: root.preview-outline-color;
+                                        x: parent.cx - root.preview-outline-width * 1px;
+                                        y: parent.cy - root.preview-outline-width * 1px;
+                                    }
+                                    preview-text := Text {
+                                        text: "天青色等烟雨";
+                                        font-size: root.font-size-pt * 1pt;
+                                        font-family: root.font-current-value;
+                                        font-weight: root.font-bold ? 700 : 400;
+                                        color: root.preview-text-color;
+                                        x: parent.cx;
+                                        y: parent.cy;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // —— 系统与网络 面板 ——
+                    Rectangle {
+                        visible: root.nav-index == 2;
+                        background: #ffffff;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: #e2e8f0;
+                        x: 0;
+                        y: 0;
+                        width: parent.width;
+                        height: parent.height;
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 12px;
+
+                            VerticalLayout {
+                                spacing: 2px;
+                                Text {
+                                    text: "系统与网络";
+                                    font-size: 14px;
+                                    font-weight: 700;
+                                    color: #0f172a;
+                                }
+                                Text {
+                                    text: "UDP 通信端口与运行日志配置";
+                                    font-size: 11px;
+                                    color: #64748b;
+                                }
+                            }
+
+                            Rectangle { height: 1px; background: #f1f5f9; }
+
+                            HorizontalLayout {
+                                spacing: 12px;
+                                Text { text: "网络端口"; vertical-alignment: center; width: 84px; color: #334155; font-weight: 500; font-size: 12px; }
+                                Text { text: "接收: " + root.recv-port-text; vertical-alignment: center; color: #475569; font-size: 13px; }
+                                Text { text: "·"; vertical-alignment: center; color: #cbd5e1; }
+                                Text { text: "发送: " + root.send-port-text; vertical-alignment: center; color: #475569; font-size: 13px; }
+                            }
+
+                            Text {
+                                text: "端口变更需重启主进程生效（此处只读）";
+                                color: #94a3b8;
+                                font-size: 11px;
+                            }
+
+                            Rectangle { height: 1px; background: #f1f5f9; }
+
+                            HorizontalLayout {
+                                spacing: 12px;
+                                Text { text: "运行日志"; vertical-alignment: center; width: 84px; color: #334155; font-weight: 500; font-size: 12px; }
+                                CheckBox {
+                                    text: "启用操作日志写盘";
+                                    checked <=> root.log-enabled;
+                                    toggled => { root.changed(); }
+                                }
+                            }
+
+                            Text {
+                                text: "开启后将在运行目录写入 log.txt，建议常规使用时关闭以优化性能";
+                                color: #94a3b8;
+                                font-size: 11px;
+                            }
+
+                            Rectangle { vertical-stretch: 1; }
+                        }
+                    }
+
+                    // —— go-musicfox 面板 ——
+                    Rectangle {
+                        visible: root.nav-index == 3;
+                        background: #ffffff;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: #e2e8f0;
+                        x: 0;
+                        y: 0;
+                        width: parent.width;
+                        height: parent.height;
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 12px;
+
+                            VerticalLayout {
+                                spacing: 2px;
+                                Text {
+                                    text: "go-musicfox";
+                                    font-size: 14px;
+                                    font-weight: 700;
+                                    color: #0f172a;
+                                }
+                                Text {
+                                    text: "Windows Terminal 宿主集成与数据目录配置";
+                                    font-size: 11px;
+                                    color: #64748b;
+                                }
+                            }
+
+                            Rectangle { height: 1px; background: #f1f5f9; }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Text { text: "程序路径"; vertical-alignment: center; width: 84px; color: #334155; font-weight: 500; font-size: 12px; }
+                                CleanInput {
+                                    font-size: 12px;
+                                    text <=> root.wt-musicfox-path-text;
+                                    edited => { root.changed(); }
+                                    placeholder-text: "例如 C:\\path\\to\\musicfox.exe";
+                                    horizontal-stretch: 1;
+                                }
+                                AppButton {
+                                    width: 64px;
+                                    text: "浏览...";
+                                    clicked => { root.browse-musicfox-clicked(); }
+                                    height: 28px;
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Text { text: "数据目录"; vertical-alignment: center; width: 84px; color: #334155; font-weight: 500; font-size: 12px; }
+                                CleanInput {
+                                    font-size: 12px;
+                                    text: root.musicfox-data-dir-hint;
+                                    read-only: true;
+                                    horizontal-stretch: 1;
+                                }
+                                AppButton {
+                                    width: 64px;
+                                    text: "打开";
+                                    clicked => { root.open-musicfox-data-clicked(); }
+                                    height: 28px;
+                                }
+                            }
+
+                            Text {
+                                text: "此路径用于托盘单击时启动 WT 终端；运行中的 WT 终端不会被重启。";
+                                color: #94a3b8;
+                                font-size: 11px;
+                                wrap: word-wrap;
+                            }
+
+                            Rectangle { vertical-stretch: 1; }
+                        }
+                    }
+                }
+
+                // —— 底部固定操作栏 ——
+                Rectangle {
+                    height: 52px;
+                    background: #ffffff;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: #e2e8f0;
+
+                    VerticalLayout {
+                        padding-top: 8px;
+                        padding-bottom: 8px;
+                        padding-left: 14px;
+                        padding-right: 14px;
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            AppButton {
+                                text: "保存并应用";
+                                clicked => { root.save-clicked(); }
+                                primary: true;
+                                height: 28px;
+                            }
+                            AppButton {
+                                text: "打开配置目录";
+                                clicked => { root.open-config-clicked(); }
+                                height: 28px;
+                            }
+                            Rectangle { width: 8px; }
+                            Text {
+                                visible: root.save-error != "";
+                                text: root.save-error;
+                                color: #dc2626;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                                overflow: elide;
+                                font-size: 12px;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // —— Toast 提示 ——
+    save-toast := Rectangle {
+        visible: root.show-toast;
+        x: parent.width - self.width - 16px;
+        y: parent.height - self.height - 16px;
+        width: toast-text-elide.preferred-width + 28px;
+        height: 36px;
+        border-radius: 18px;
+        background: #e61e293b;
+
+        toast-text-elide := Text {
+            text: root.toast-text;
+            color: #ffffff;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+            font-size: 12px;
+        }
+    }
+
+    // —— 配置解析失败模态框 ——
+    parse-modal := Rectangle {
+        visible: root.show-parse-modal;
+        background: #66000000;
+
+        Rectangle {
+            width: 380px;
+            height: 180px;
+            border-radius: 8px;
+            background: #ffffff;
+            border-width: 1px;
+            border-color: #e2e8f0;
+
+            VerticalLayout {
+                padding: 18px;
+                spacing: 10px;
+                Text { text: "配置解析失败"; font-weight: 700; font-size: 14px; color: #0f172a; }
+                Text { text: "config.toml 格式损坏或无法解析："; font-size: 12px; color: #334155; }
+                Text { text: root.parse-error; color: #dc2626; font-size: 11px; wrap: word-wrap; vertical-stretch: 1; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    AppButton { text: "使用默认配置重置"; clicked => { root.parse-reset-clicked(); } primary: true; }
+                    AppButton { text: "取消"; clicked => { root.parse-cancel-clicked(); } }
+                }
+            }
+        }
+    }
+
+    // —— 未保存修改关闭拦截模态框 ——
+    close-modal := Rectangle {
+        visible: root.show-close-modal;
+        background: #66000000;
+
+        Rectangle {
+            width: 340px;
+            height: 150px;
+            border-radius: 8px;
+            background: #ffffff;
+            border-width: 1px;
+            border-color: #e2e8f0;
+
+            VerticalLayout {
+                padding: 18px;
+                spacing: 10px;
+                Text { text: "未保存的修改"; font-weight: 700; font-size: 14px; color: #0f172a; }
+                Text { text: "当前存在未保存的修改，是否保存？"; color: #334155; font-size: 12px; }
+                Rectangle { vertical-stretch: 1; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    AppButton { text: "保存"; clicked => { root.close-save-clicked(); } primary: true; }
+                    AppButton { text: "丢弃"; clicked => { root.close-discard-clicked(); } }
+                    AppButton { text: "取消"; clicked => { root.close-cancel-clicked(); } }
+                }
+            }
+        }
+    }
+}
