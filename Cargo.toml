@@ -45,7 +45,9 @@ default = []
 skia = ["slint/renderer-skia"]
 
 [target.'cfg(windows)'.dependencies]
-tray-icon = "0.19"
+# 固定到 0.24，关掉默认 `gtk` feature，避免拉入 `libappindicator` → `glib 0.18`（GHSA-wrw7-89jp-8q8g / RUSTSEC-2024-0429）。
+# 仅启用 `libxdo`（Windows 上对菜单预定义项无影响，但保留以防未来在其它平台编译）。
+tray-icon = { version = "0.24", default-features = false, features = ["libxdo"] }
 windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_System_Threading",
