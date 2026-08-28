@@ -16,7 +16,7 @@ use windows::Win32::Foundation::{
 };
 use windows::Win32::Storage::FileSystem::{
     CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
-    PIPE_ACCESS_DUPLEX, PIPE_ACCESS_INBOUND,
+    PIPE_ACCESS_DUPLEX,
 };
 use windows::Win32::System::Pipes::{
     ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, WaitNamedPipeW,
@@ -376,7 +376,7 @@ impl PlatformPipeServer for WindowsBackend {
                 let handle = unsafe {
                     CreateNamedPipeW(
                         windows::core::PCWSTR(name_w.as_ptr()),
-                        PIPE_ACCESS_INBOUND,
+                        PIPE_ACCESS_DUPLEX,
                         windows::Win32::System::Pipes::NAMED_PIPE_MODE(
                             PIPE_TYPE_BYTE.0 | PIPE_READMODE_BYTE.0 | PIPE_WAIT.0,
                         ),
@@ -401,6 +401,13 @@ impl PlatformPipeServer for WindowsBackend {
                                 if let Ok(cfg) = crate::load_config(&config_path) {
                                     ctx.update_config(cfg);
                                 }
+                            }
+                            // 写一行 OK，让 client 的 read_line 能拿到响应；
+                            // 否则 client/server 互相等对方关闭 handle 死锁。
+                            let resp = IpcMessage::Success.to_bytes();
+                            if let Ok(mut f) = file.try_clone() {
+                                let _ = f.write_all(&resp);
+                                let _ = f.flush();
                             }
                         }
                     }

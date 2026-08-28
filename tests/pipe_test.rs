@@ -29,10 +29,22 @@ mod windows_tests {
             event_bus,
         ));
 
-        reload::start_server(config_path, ctx.clone());
+        reload::start_server(config_path.clone(), ctx.clone());
         std::thread::sleep(Duration::from_millis(100));
 
-        reload::notify_reload();
+        // 直接通过命名管道发 RELOAD；不能走 reload::notify_reload()，
+        // 后者在 cargo test binary 下会被 `deps/` 路径短路（防止派生孤儿进程），
+        // 导致 reload 永远不发出，测试断言必然失败。
+        let pipe_name = lyric_for_musicfox::protocol::platform_pipe_path(
+            "reload",
+            lyric_for_musicfox::protocol::get_session_id(),
+        );
+        let payload = lyric_for_musicfox::protocol::IpcMessage::ReloadConfig.to_bytes();
+        // 同步发送（500ms 超时），保证 server 在本测试线程退出前收到 RELOAD。
+        let _ = std::thread::spawn(move || {
+            let _ = lyric_for_musicfox::platform::current().send(&pipe_name, &payload, 500);
+        })
+        .join();
 
         let mut success = false;
         for _ in 0..20 {
@@ -46,7 +58,7 @@ mod windows_tests {
             }
             std::thread::sleep(Duration::from_millis(50));
         }
-        assert!(success);
+        assert!(success, "reload pipe did not deliver ConfigReloaded within 1s");
     }
 
     #[test]
