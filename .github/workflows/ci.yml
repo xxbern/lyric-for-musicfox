@@ -33,12 +33,15 @@ jobs:
       - name: Cargo Check
         run: cargo check --all-targets
 
-      - name: Cargo Test
-        run: cargo test --all-targets
-        # 不要加 --nocapture：GitHub Actions runner 通过匿名 pipe 消费子进程 stderr，
-        # MSVC/Windows 上 stderr 写入 4KB 以上会阻塞写端，造成测试进程 deadlock。
-        # cargo test 在 panic 时仍会输出 backtrace，不需要 --nocapture。
-        timeout-minutes: 30
+      - name: Cargo Test (lib + bins)
+        run: cargo test --lib --bins
+        timeout-minutes: 10
+
+      - name: Cargo Test (integration tests)
+        # 串行跑 integration test：其中 pipe / instance / logger 等会触碰
+        # 进程级资源（命名管道、全局 mutex、后台日志线程）。
+        run: cargo test --tests -- --test-threads=1
+        timeout-minutes: 20
 
       - name: Cargo Check (Windows with Skia)
         if: runner.os == 'Windows'
