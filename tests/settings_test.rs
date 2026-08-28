@@ -112,6 +112,9 @@ fn save_writes_config_atomically_and_recreates_tmp() {
     let mut form = FormState::new(cfg_path.clone()).unwrap();
     form.bootstrap().unwrap();
 
+    if let Ok(exe) = std::env::current_exe() {
+        form.draft.wt.musicfox_path = exe.to_string_lossy().to_string();
+    }
     form.draft.window.width = 1024;
     form.mark_dirty();
 
@@ -135,6 +138,9 @@ fn invalid_save_keeps_formal_config_intact() {
     let mut form = FormState::new(cfg_path.clone()).unwrap();
     form.bootstrap().unwrap();
 
+    if let Ok(exe) = std::env::current_exe() {
+        form.draft.wt.musicfox_path = exe.to_string_lossy().to_string();
+    }
     // 把 font_color 设非法
     form.draft.lyric_style.font_color = "#zzz".into();
     form.mark_dirty();
