@@ -26,6 +26,15 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
 
+      - name: Update Version in Cargo.toml from Tag
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            echo "Updating Cargo.toml version to $VERSION (from tag $GITHUB_REF_NAME)"
+            sed -i -E "0,/^version = \"[^\"]*\"/s//version = \"$VERSION\"/" Cargo.toml
+          fi
+
       - name: Build Release Binaries
         shell: bash
         run: |
