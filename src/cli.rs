@@ -7,7 +7,7 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(
     name = "lyric-for-musicfox",
-    version = "0.2.0",
+    version,
     about = "lyric-for-musicfox 桌面歌词叠加应用",
     long_about = None,
 )]
