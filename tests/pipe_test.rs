@@ -3,8 +3,7 @@ mod windows_tests {
     use lyric_for_musicfox::config::Config;
     use lyric_for_musicfox::lyric::state::LyricState;
     use lyric_for_musicfox::pipe::{get_pipe_name, get_session_id, pos, reload};
-    use std::sync::atomic::Ordering;
-    use std::sync::{Arc, Mutex, RwLock};
+    use std::sync::Arc;
     use std::time::Duration;
     use tempfile::TempDir;
 

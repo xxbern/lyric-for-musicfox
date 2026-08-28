@@ -82,9 +82,23 @@ fn font_family_validation() {
 fn musicfox_path_validation() {
     assert!(validate_musicfox_path("").is_err(), "empty path must fail");
     assert!(
-        validate_musicfox_path("/non_existent_dir_98765/musicfox.exe").is_err(),
-        "non-existent path must fail"
+        validate_musicfox_path("   ").is_err(),
+        "whitespace-only path must fail"
     );
+    assert!(
+        validate_musicfox_path("\t\n ").is_err(),
+        "tabs/newline-only path must fail"
+    );
+    assert!(
+        validate_musicfox_path("/non_existent_dir_98765/musicfox.exe").is_err(),
+        "non-existent unix path must fail"
+    );
+    if cfg!(windows) {
+        assert!(
+            validate_musicfox_path("C:\\non_existent_dir_98765\\musicfox.exe").is_err(),
+            "non-existent windows path must fail on windows"
+        );
+    }
 
     // 当前存在的当前文件应通过验证
     if let Ok(exe) = std::env::current_exe() {

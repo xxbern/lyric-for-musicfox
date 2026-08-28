@@ -159,7 +159,11 @@ impl PlatformTray for WindowsBackend {
                 let mut sent = false;
                 while let Ok(event) = tray_channel.try_recv() {
                     match event {
-                        tray_icon::TrayIconEvent::Click { button, .. }
+                        tray_icon::TrayIconEvent::Click {
+                            button,
+                            button_state: tray_icon::MouseButtonState::Up,
+                            ..
+                        }
                         | tray_icon::TrayIconEvent::DoubleClick { button, .. } => {
                             match button {
                                 tray_icon::MouseButton::Left => {
@@ -262,6 +266,7 @@ pub fn show_tray_popup_menu_for_window(hwnd: HWND, tx: &crossbeam_channel::Sende
             let _ = PostMessageW(target_hwnd, WM_NULL, WPARAM(0), LPARAM(0));
         }
         let _ = DestroyMenu(hmenu);
+        mark_tray_menu_shown();
 
         match cmd_id.0 as usize {
             ID_CONFIG => {

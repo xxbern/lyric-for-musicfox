@@ -7,18 +7,14 @@ use lyric_for_musicfox::instance::{
 };
 use lyric_for_musicfox::AppError;
 
-fn run_mutex_test(name: &str, test: impl Fn() + std::panic::UnwindSafe) {
-    let pid = std::process::id();
-    let test_name = format!("{} (pid {})", name, pid);
-    let result = std::panic::catch_unwind(test);
-    if result.is_err() {
-        eprintln!("FAIL: {}", test_name);
-    }
-    assert!(result.is_ok(), "Test panicked: {}", test_name);
-}
+use std::sync::Mutex;
+
+static TEST_MUTEX: Mutex<()> = Mutex::new(());
 
 #[test]
 fn test_mutex_acquire_twice_returns_another_instance() {
+    let _guard = TEST_MUTEX.lock().unwrap_or_else(|p| p.into_inner());
+
     // 第一次获取：第一个实例成功
     let first = acquire_main_mutex().expect("first acquire should succeed");
     assert!(first.is_some());
@@ -36,6 +32,8 @@ fn test_mutex_acquire_twice_returns_another_instance() {
 
 #[test]
 fn test_settings_mutex_acquire_twice_returns_another_instance() {
+    let _guard = TEST_MUTEX.lock().unwrap_or_else(|p| p.into_inner());
+
     let first = acquire_settings_mutex().expect("first settings acquire should succeed");
     assert!(first.is_some());
 
@@ -50,6 +48,8 @@ fn test_settings_mutex_acquire_twice_returns_another_instance() {
 
 #[test]
 fn test_main_and_settings_mutex_are_independent() {
+    let _guard = TEST_MUTEX.lock().unwrap_or_else(|p| p.into_inner());
+
     let main_handle = acquire_main_mutex().expect("main mutex first");
     let settings_handle = acquire_settings_mutex().expect("settings mutex first");
     assert!(main_handle.is_some());
