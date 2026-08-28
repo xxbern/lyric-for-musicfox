@@ -64,6 +64,24 @@ impl WtService {
                 crate::platform::current().set_wt_alpha(hwnd, 0);
             }
         } else {
+            // 校验 musicfox 可执行文件有效性
+            if let Err(err) = crate::settings::validate::validate_musicfox_path(&effective_config.musicfox_path) {
+                log::warn!("Cannot launch WT: musicfox executable invalid: {err}");
+                if let Ok(exe) = std::env::current_exe() {
+                    let _ = std::process::Command::new(exe).arg("--settings").spawn();
+                }
+                let desc = format!("无法启动 go-musicfox：{err}。\n\n已为您自动打开设置界面，请在设置中指定正确的 musicfox.exe 路径。");
+                std::thread::spawn(move || {
+                    rfd::MessageDialog::new()
+                        .set_title("go-musicfox 未找到")
+                        .set_description(&desc)
+                        .set_level(rfd::MessageLevel::Warning)
+                        .set_buttons(rfd::MessageButtons::Ok)
+                        .show();
+                });
+                return;
+            }
+
             // 加锁标记正在启动
             {
                 let mut launching = get_is_launching().lock().unwrap();

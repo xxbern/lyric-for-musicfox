@@ -7,7 +7,7 @@ set -e
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 MUSICFOX_DIR="${SCRIPT_DIR}/go-musicfox"
 PATCH_FILE="${SCRIPT_DIR}/lyric_udp.patch"
-MUSICFOX_TAG="${MUSICFOX_TAG:-v5.0.2}"
+MUSICFOX_TAG="${MUSICFOX_TAG:-v5.1.0}"
 
 if [ ! -d "${MUSICFOX_DIR}" ]; then
     echo "未找到 go-musicfox 目录，正在从 GitHub 克隆..."
