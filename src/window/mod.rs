@@ -407,10 +407,11 @@ fn reload_config(app: &LyricWindow, r: &mut Runtime, cfg: Config, ctx: &Arc<AppC
 
     if let Some(hwnd) = r.hwnd {
         crate::platform::current().apply_locked_style(hwnd, cfg.window.locked);
-        if let (Some(x), Some(y)) = (cfg.window.pos_x, cfg.window.pos_y) {
-            crate::platform::current().apply_outer_position(hwnd, (x, y));
-            crate::services::position::PositionService::new(ctx.clone()).sync_all_pos((x, y));
-        }
+        // Intentionally skip cfg.window.pos_x/y here: the in-memory target_pos
+        // (set on drag-release or initial startup) is authoritative at runtime.
+        // Applying the stale on-disk coordinates would move the window back to
+        // wherever it was the last time the config file was written, undoing any
+        // drag the user performed since then.
     }
 }
 

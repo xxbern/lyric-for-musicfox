@@ -605,7 +605,17 @@ pub unsafe extern "system" fn monitor_wnd_proc(
     lparam: LPARAM,
 ) -> LRESULT {
     use std::sync::atomic::Ordering;
-    if msg == 0x007E { // WM_DISPLAYCHANGE = 0x007E
+    if msg == 0x0084 { // WM_NCHITTEST
+        let is_locked = WND_CTX.with(|cell| {
+            cell.borrow()
+                .as_ref()
+                .map(|ctx| ctx.signals.is_locked.load(Ordering::Relaxed))
+                .unwrap_or(false)
+        });
+        if is_locked {
+            return LRESULT(-1); // HTTRANSPARENT: pass all hit-tests through to windows below
+        }
+    } else if msg == 0x007E { // WM_DISPLAYCHANGE
         WND_CTX.with(|cell| {
             if let Some(ctx) = &*cell.borrow() {
                 ctx.signals.display_changed.store(true, Ordering::SeqCst);
@@ -857,13 +867,24 @@ impl PlatformWindowStyle for WindowsBackend {
     }
 
     fn apply_locked_style(&self, hwnd: super::WindowHandle, locked: bool) {
+        use std::sync::atomic::Ordering;
+        // Sync locked state into WND_CTX signal for monitor_wnd_proc WM_NCHITTEST interception.
+        WND_CTX.with(|cell| {
+            if let Some(ctx) = &*cell.borrow() {
+                ctx.signals.is_locked.store(locked, Ordering::SeqCst);
+            }
+        });
         unsafe {
             let prev = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
             let mut new = (prev | (WS_EX_TOOLWINDOW.0 as isize)) & !(WS_EX_APPWINDOW.0 as isize);
             if locked {
-                new |= WS_EX_TRANSPARENT.0 as isize;
+                // WS_EX_TRANSPARENT requires WS_EX_LAYERED to be effective on Windows.
+                new |= (WS_EX_TRANSPARENT.0 as isize) | (WS_EX_LAYERED.0 as isize);
             } else {
                 new &= !(WS_EX_TRANSPARENT.0 as isize);
+                // Keep WS_EX_LAYERED only if already set (e.g. by WT-hosted mode);
+                // remove it here so the window fully regains normal hit-testing.
+                new &= !(WS_EX_LAYERED.0 as isize);
             }
             if new != prev {
                 SetWindowLongPtrW(hwnd, GWL_EXSTYLE, new);

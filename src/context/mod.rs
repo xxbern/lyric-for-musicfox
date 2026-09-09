@@ -9,6 +9,7 @@ pub struct Signals {
     pub is_dragging: Arc<AtomicBool>,
     pub display_changed: Arc<AtomicBool>,
     pub dpi_recheck_pending: Arc<AtomicBool>,
+    pub is_locked: Arc<AtomicBool>,
 }
 
 impl Default for Signals {
@@ -18,6 +19,7 @@ impl Default for Signals {
             is_dragging: Arc::new(AtomicBool::new(false)),
             display_changed: Arc::new(AtomicBool::new(false)),
             dpi_recheck_pending: Arc::new(AtomicBool::new(false)),
+            is_locked: Arc::new(AtomicBool::new(false)),
         }
     }
 }
