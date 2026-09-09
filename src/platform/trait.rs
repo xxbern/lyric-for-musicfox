@@ -39,7 +39,6 @@ pub trait PlatformWindowStyle {
     fn refresh_stay_on_top(&self, h: crate::platform::WindowHandle);
     fn window_outer_position(&self, h: crate::platform::WindowHandle) -> Option<(i32, i32)>;
     fn cursor_position(&self) -> Option<(i32, i32)>;
-    fn has_transparent_style(&self, h: crate::platform::WindowHandle) -> bool;
     fn install_display_change_hook(&self, h: crate::platform::WindowHandle, ctx: Arc<AppContext>);
 }
 

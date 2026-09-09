@@ -19,9 +19,6 @@ pub enum AppError {
     #[error("port {0} already in use")]
     PortInUse(u16),
 
-    #[error("settings mode is available from P1")]
-    SettingsUnavailable,
-
     #[error("pos-client query timed out")]
     PosPipeTimeout,
 
@@ -41,7 +38,6 @@ impl AppError {
             AppError::AnotherInstance => 6,
             AppError::MutexCreate(_) => 3,
             AppError::PortInUse(_) => 1,
-            AppError::SettingsUnavailable => 4,
             // 设置 UI 边界吞掉并降级为磁盘坐标；不是进程退出原因
             AppError::PosPipeTimeout => 0,
             AppError::Json(_) => 1,
@@ -57,7 +53,6 @@ impl AppError {
             AppError::AnotherInstance => eprintln!("another instance running"),
             AppError::MutexCreate(msg) => eprintln!("mutex create failed: {msg}"),
             AppError::PortInUse(port) => eprintln!("port {port} already in use"),
-            AppError::SettingsUnavailable => eprintln!("settings mode is available from P1"),
             AppError::PosPipeTimeout => {}
             AppError::Json(e) => eprintln!("json error: {e}"),
             AppError::Io(e) => eprintln!("io error: {e}"),

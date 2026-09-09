@@ -107,9 +107,8 @@ pub fn run(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let services = ServiceHandles::new(ctx.clone());
     let config = resolve_initial_position(&services, ctx.get_config());
-    services
-        .position
-        .set_current_pos((config.window.pos_x.unwrap(), config.window.pos_y.unwrap()));
+    let initial_pos = (config.window.pos_x.unwrap(), config.window.pos_y.unwrap());
+    services.position.sync_all_pos(initial_pos);
     ctx.update_config(config.clone());
 
     let app = LyricWindow::new()?;
@@ -207,6 +206,8 @@ fn tick(
                 services
                     .style
                     .set_click_through(h, r.config.window.locked);
+                let target_pos = services.position.get_target_pos();
+                crate::platform::current().apply_outer_position(h, target_pos);
                 crate::platform::current().install_display_change_hook(h, ctx.clone());
                 r.hwnd = Some(h);
                 crate::diag::record("hwnd_hooked");
@@ -276,18 +277,18 @@ fn tick(
             .display_changed
             .swap(false, std::sync::atomic::Ordering::SeqCst);
         let due = triggered_event
-            || r.last_frame.is_none()
             || now.duration_since(r.last_display_check) >= Duration::from_secs(5);
         if due {
             r.last_display_check = now;
             let layout = services.monitor.enumerate_screens();
+            let target_pos = services.position.get_target_pos();
             let current_pos = services.position.get_current_pos();
             let ppp = services.monitor.primary_pixels_per_point(&layout);
             let size_phys = (
                 (r.config.window.width as f32 * ppp).round() as i32,
                 (r.config.window.height as f32 * ppp).round() as i32,
             );
-            let clamped = services.monitor.clamp_position(current_pos, &layout, size_phys);
+            let clamped = services.monitor.clamp_position(target_pos, &layout, size_phys);
             if clamped != current_pos {
                 if let Some(hwnd) = r.hwnd {
                     services.position.apply_window_pos(hwnd, clamped);
@@ -326,8 +327,11 @@ fn tick(
         )
     };
     if let (Some(pos), Some(hwnd)) = (new_pos, r.hwnd) {
-        services.position.apply_window_pos(hwnd, pos);
-        services.position.set_current_pos(pos);
+        if left_released {
+            services.position.apply_and_sync_target(hwnd, pos);
+        } else {
+            services.position.apply_window_pos(hwnd, pos);
+        }
     }
 
     let is_dragging = ctx.signals.is_dragging.load(std::sync::atomic::Ordering::Relaxed);
@@ -405,6 +409,7 @@ fn reload_config(app: &LyricWindow, r: &mut Runtime, cfg: Config, ctx: &Arc<AppC
         crate::platform::current().apply_locked_style(hwnd, cfg.window.locked);
         if let (Some(x), Some(y)) = (cfg.window.pos_x, cfg.window.pos_y) {
             crate::platform::current().apply_outer_position(hwnd, (x, y));
+            crate::services::position::PositionService::new(ctx.clone()).sync_all_pos((x, y));
         }
     }
 }

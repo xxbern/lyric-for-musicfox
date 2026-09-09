@@ -12,6 +12,8 @@ pub struct LyricState {
     pub time_ms: i64,
     pub pos_x: i32,
     pub pos_y: i32,
+    pub target_pos_x: i32,
+    pub target_pos_y: i32,
 }
 
 #[derive(Debug, Clone, Default)]

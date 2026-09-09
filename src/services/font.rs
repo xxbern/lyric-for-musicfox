@@ -310,16 +310,13 @@ pub(crate) fn system_families() -> Vec<String> {
     imp::list_families()
 }
 
-/// 字体服务：仅在内部持有 `Arc<AppContext>`。
-#[derive(Clone)]
-pub struct FontService {
-    #[allow(dead_code)]
-    ctx: Arc<AppContext>,
-}
+/// 字体服务：提供字体查找与加载接口。
+#[derive(Clone, Default)]
+pub struct FontService;
 
 impl FontService {
-    pub fn new(ctx: Arc<AppContext>) -> Self {
-        Self { ctx }
+    pub fn new(_ctx: Arc<AppContext>) -> Self {
+        Self
     }
 
     /// 解析请求的字体族；不存在时回退默认字体。

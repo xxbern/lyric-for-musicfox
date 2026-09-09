@@ -456,7 +456,7 @@ impl PlatformPipeServer for WindowsBackend {
                             if let Ok(IpcMessage::GetPosition) = IpcMessage::parse(line.trim_end().as_bytes()) {
                                 let (pos_x, pos_y) = {
                                     let s = ctx.state.read().unwrap_or_else(|p| p.into_inner());
-                                    (s.pos_x, s.pos_y)
+                                    (s.target_pos_x, s.target_pos_y)
                                 };
                                 let resp = IpcMessage::PositionResponse(Some((pos_x, pos_y))).to_bytes();
                                 if let Ok(mut f) = file.try_clone() {
@@ -612,7 +612,12 @@ pub unsafe extern "system" fn monitor_wnd_proc(
             }
         });
     } else if msg == 0x02E0 { // WM_DPICHANGED = 0x02E0
-        let is_dragging = (windows::Win32::UI::Input::KeyboardAndMouse::GetKeyState(0x01) as i16) < 0;
+        let is_dragging = WND_CTX.with(|cell| {
+            cell.borrow()
+                .as_ref()
+                .map(|ctx| ctx.signals.is_dragging.load(Ordering::Relaxed))
+                .unwrap_or(false)
+        });
         if is_dragging {
             WND_CTX.with(|cell| {
                 if let Some(ctx) = &*cell.borrow() {
@@ -627,12 +632,17 @@ pub unsafe extern "system" fn monitor_wnd_proc(
             let _ = SetWindowPos(
                 hwnd,
                 HWND_TOP,
-                r.left,
-                r.top,
+                0,
+                0,
                 r.right - r.left,
                 r.bottom - r.top,
-                SWP_NOZORDER | SWP_NOACTIVATE,
+                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
             );
+            WND_CTX.with(|cell| {
+                if let Some(ctx) = &*cell.borrow() {
+                    ctx.signals.display_changed.store(true, Ordering::SeqCst);
+                }
+            });
         }
         return LRESULT(0);
     }
@@ -908,13 +918,6 @@ impl PlatformWindowStyle for WindowsBackend {
         let mut pt = POINT::default();
         unsafe { GetCursorPos(&mut pt) }.ok()?;
         Some((pt.x, pt.y))
-    }
-
-    fn has_transparent_style(&self, hwnd: super::WindowHandle) -> bool {
-        unsafe {
-            let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-            (ex & (WS_EX_TRANSPARENT.0 as isize)) != 0
-        }
     }
 
     fn install_display_change_hook(&self, hwnd: super::WindowHandle, ctx: Arc<AppContext>) {

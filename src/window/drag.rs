@@ -84,6 +84,8 @@ pub fn process_pointer_input(
         let final_pos = computed.unwrap_or(current_outer_position);
         state.pos_x = final_pos.0;
         state.pos_y = final_pos.1;
+        state.target_pos_x = final_pos.0;
+        state.target_pos_y = final_pos.1;
         drag.phase = DragPhase::Idle;
         signals.is_dragging.store(false, Ordering::SeqCst);
         return Some(final_pos);
@@ -102,6 +104,8 @@ pub fn flush_on_exit(
     if matches!(drag.phase, DragPhase::Active { .. }) {
         state.pos_x = current_outer_position.0;
         state.pos_y = current_outer_position.1;
+        state.target_pos_x = current_outer_position.0;
+        state.target_pos_y = current_outer_position.1;
         drag.phase = DragPhase::Idle;
         signals.is_dragging.store(false, Ordering::SeqCst);
     }

@@ -4,28 +4,17 @@ use std::sync::Arc;
 use crate::context::AppContext;
 use crate::platform::WindowHandle;
 
-#[derive(Clone)]
-pub struct WindowStyleService {
-    ctx: Arc<AppContext>,
-}
+#[derive(Clone, Default)]
+pub struct WindowStyleService;
 
 impl WindowStyleService {
-    pub fn new(ctx: Arc<AppContext>) -> Self {
-        Self { ctx }
+    pub fn new(_ctx: Arc<AppContext>) -> Self {
+        Self
     }
 
     /// 锁定 = 鼠标穿透（WS_EX_TRANSPARENT）；解锁恢复可点击。
     pub fn set_click_through(&self, hwnd: WindowHandle, locked: bool) {
         crate::platform::current().apply_locked_style(hwnd, locked);
-    }
-
-    pub fn is_locked(&self) -> bool {
-        self.ctx
-            .config
-            .read()
-            .unwrap_or_else(|p| p.into_inner())
-            .window
-            .locked
     }
 
     pub fn enforce_always_on_top(&self, hwnd: WindowHandle) {

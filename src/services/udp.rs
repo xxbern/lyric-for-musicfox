@@ -6,7 +6,6 @@ use crate::context::AppContext;
 
 #[derive(Clone)]
 pub struct LyricUdpService {
-    #[allow(dead_code)]
     ctx: Arc<AppContext>,
 }
 
@@ -22,6 +21,4 @@ impl LyricUdpService {
             crate::lyric::udp::recv_loop(socket, ctx);
         });
     }
-
-    pub fn stop_listening(&self) {}
 }

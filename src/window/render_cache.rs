@@ -45,9 +45,4 @@ impl RenderCache {
         }
         changed
     }
-
-    /// 最近一次键更新时的 playing 快照（用于滚动/重绘判定）。
-    pub fn playing_snapshot(&self) -> bool {
-        self.playing
-    }
 }

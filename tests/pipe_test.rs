@@ -74,6 +74,8 @@ mod windows_tests {
             let mut s = ctx.state.write().unwrap();
             s.pos_x = 987;
             s.pos_y = 654;
+            s.target_pos_x = 987;
+            s.target_pos_y = 654;
         }
 
         pos::start_server(ctx.clone());

@@ -82,10 +82,6 @@ impl PlatformWindowStyle for StubBackend {
         None
     }
 
-    fn has_transparent_style(&self, _h: super::WindowHandle) -> bool {
-        false
-    }
-
     fn install_display_change_hook(&self, _h: super::WindowHandle, _ctx: Arc<AppContext>) {}
 }
 
