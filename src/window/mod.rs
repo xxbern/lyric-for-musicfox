@@ -40,7 +40,6 @@ struct Runtime {
     scroll: ScrollState,
     drag: DragState,
     cache: RenderCache,
-    last_frame: Option<Instant>,
     hwnd: Option<crate::platform::WindowHandle>,
     last_display_check: Instant,
     last_stay_on_top_refresh: Instant,
@@ -114,9 +113,15 @@ pub fn run(
     let app = LyricWindow::new()?;
     crate::diag::record("slint_created");
 
+    let initial_layout = services.monitor.enumerate_screens();
+    let initial_ppp = if app.window().scale_factor() > 0.0 {
+        app.window().scale_factor()
+    } else {
+        monitor::primary_pixels_per_point(&initial_layout)
+    };
     app.window().set_size(slint::PhysicalSize::new(
-        config.window.width.max(1),
-        config.window.height.max(1),
+        ((config.window.width as f32 * initial_ppp).round() as u32).max(1),
+        ((config.window.height as f32 * initial_ppp).round() as u32).max(1),
     ));
     if let (Some(x), Some(y)) = (config.window.pos_x, config.window.pos_y) {
         app.window().set_position(slint::PhysicalPosition::new(x, y));
@@ -140,7 +145,6 @@ pub fn run(
         scroll: ScrollState::new(),
         drag: DragState::new(),
         cache: RenderCache::new(),
-        last_frame: None,
         hwnd: None,
         last_display_check: Instant::now(),
         last_stay_on_top_refresh: Instant::now(),
@@ -246,28 +250,15 @@ fn tick(
         let family = r.resolved_font_family.clone();
         r.cache.update_key(text, &style, &family, is_placeholder, playing)
     };
-    let text_width = app.get_lyric_text_width();
-    let win_w = logical_window_width(app);
 
     if style_changed || r.scroll.needs_recompute {
-        r.scroll.reset_for_font_change(text_width, win_w);
-        r.scroll.needs_recompute = false;
-    } else {
-        r.scroll.text_width = text_width;
+        apply_style_properties(app, &r.config, &r.resolved_font_family, text, is_placeholder, playing);
+        let text_width = app.get_lyric_text_width();
+        let win_w = logical_window_width(app);
+        r.scroll.update(text_width, win_w);
     }
 
-    // —— 3. dt 与滚动推进 ——
     let now = Instant::now();
-    let dt = r
-        .last_frame
-        .map(|t| now.saturating_duration_since(t).as_secs_f32())
-        .unwrap_or(0.0)
-        .max(0.0);
-    r.last_frame = Some(now);
-    r.scroll.update(dt, text, win_w);
-
-    apply_style_properties(app, &r.config, &r.resolved_font_family, text, is_placeholder, playing);
-    app.set_offset_x(r.scroll.offset_x.into());
 
     // —— 4. 显示器变化检查（5s 节流，拖拽期间不执行） ——
     let is_dragging = ctx.signals.is_dragging.load(std::sync::atomic::Ordering::Relaxed);

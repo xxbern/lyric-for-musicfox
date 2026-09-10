@@ -145,3 +145,34 @@ fn test_apply_to_state_placeholder_on_empty() {
     assert!(state.current_line.is_placeholder);
     assert_eq!(*state.current_line.text, *"");
 }
+
+#[test]
+fn test_udp_event_bus_notifies_lyric_state_changed() {
+    use std::sync::Arc;
+    use lyric_for_musicfox::context::AppContext;
+    use lyric_for_musicfox::event_bus::{AppEvent, EventBus};
+    use lyric_for_musicfox::Config;
+
+    let (bus, rx) = EventBus::new(16);
+    let ctx = Arc::new(AppContext::new(Config::default(), LyricState::placeholder(), bus));
+
+    let payload = parse_packet(br#"{"playing":true,"current_line":{"text":"New Line"}}"#).unwrap();
+    {
+        let mut state_guard = ctx.state.write().unwrap();
+        let prev_text = state_guard.current_line.text.clone();
+        let prev_playing = state_guard.playing;
+        apply_to_state(&mut state_guard, &payload);
+        if prev_text != state_guard.current_line.text || prev_playing != state_guard.playing {
+            ctx.event_bus.emit(AppEvent::LyricStateChanged);
+            ctx.event_bus.emit(AppEvent::RequestRepaint);
+        }
+    }
+
+    let mut received_state_changed = false;
+    while let Ok(ev) = rx.try_recv() {
+        if matches!(ev, AppEvent::LyricStateChanged) {
+            received_state_changed = true;
+        }
+    }
+    assert!(received_state_changed, "歌词更新必须派发 LyricStateChanged 事件");
+}

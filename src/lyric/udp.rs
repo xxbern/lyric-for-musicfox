@@ -228,6 +228,8 @@ pub fn recv_loop(socket: UdpSocket, ctx: std::sync::Arc<crate::context::AppConte
                                     || prev_playing != state_guard.playing
                                 {
                                     ctx.event_bus
+                                        .emit(crate::event_bus::AppEvent::LyricStateChanged);
+                                    ctx.event_bus
                                         .emit(crate::event_bus::AppEvent::RequestRepaint);
                                 }
                             }
@@ -240,6 +242,8 @@ pub fn recv_loop(socket: UdpSocket, ctx: std::sync::Arc<crate::context::AppConte
                                 if prev_text != state_guard.current_line.text
                                     || prev_playing != state_guard.playing
                                 {
+                                    ctx.event_bus
+                                        .emit(crate::event_bus::AppEvent::LyricStateChanged);
                                     ctx.event_bus
                                         .emit(crate::event_bus::AppEvent::RequestRepaint);
                                 }
