@@ -54,8 +54,8 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: self.preferred-width;
-            height: self.preferred-height;
+            width: measure.width;
+            height: measure.height;
             visible: root.has-outline;
             x: root.base-x + root.outline-w;
             y: root.base-y;
@@ -66,8 +66,8 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: self.preferred-width;
-            height: self.preferred-height;
+            width: measure.width;
+            height: measure.height;
             visible: root.has-outline;
             x: root.base-x - root.outline-w;
             y: root.base-y;
@@ -78,8 +78,8 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: self.preferred-width;
-            height: self.preferred-height;
+            width: measure.width;
+            height: measure.height;
             visible: root.has-outline;
             x: root.base-x;
             y: root.base-y + root.outline-w;
@@ -90,8 +90,8 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: self.preferred-width;
-            height: self.preferred-height;
+            width: measure.width;
+            height: measure.height;
             visible: root.has-outline;
             x: root.base-x;
             y: root.base-y - root.outline-w;
@@ -102,8 +102,8 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: self.preferred-width;
-            height: self.preferred-height;
+            width: measure.width;
+            height: measure.height;
             visible: root.has-outline;
             x: root.base-x + root.outline-w;
             y: root.base-y + root.outline-w;
@@ -114,8 +114,8 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: self.preferred-width;
-            height: self.preferred-height;
+            width: measure.width;
+            height: measure.height;
             visible: root.has-outline;
             x: root.base-x + root.outline-w;
             y: root.base-y - root.outline-w;
@@ -126,8 +126,8 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: self.preferred-width;
-            height: self.preferred-height;
+            width: measure.width;
+            height: measure.height;
             visible: root.has-outline;
             x: root.base-x - root.outline-w;
             y: root.base-y + root.outline-w;
@@ -138,8 +138,32 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: self.preferred-width;
-            height: self.preferred-height;
+            width: measure.width;
+            height: measure.height;
+            visible: root.has-outline;
+            x: root.base-x - root.outline-w;
+            y: root.base-y - root.outline-w;
+        }
+        Text {
+            text: root.lyric-text;
+            font-size: root.font-size-px;
+            font-family: root.font-family-name;
+            font-weight: root.font-weight;
+            color: root.outline-color;
+            width: measure.width;
+            height: measure.height;
+            visible: root.has-outline;
+            x: root.base-x - root.outline-w;
+            y: root.base-y + root.outline-w;
+        }
+        Text {
+            text: root.lyric-text;
+            font-size: root.font-size-px;
+            font-family: root.font-family-name;
+            font-weight: root.font-weight;
+            color: root.outline-color;
+            width: measure.width;
+            height: measure.height;
             visible: root.has-outline;
             x: root.base-x - root.outline-w;
             y: root.base-y - root.outline-w;
@@ -152,8 +176,8 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.text-color;
-            width: self.preferred-width;
-            height: self.preferred-height;
+            width: measure.width;
+            height: measure.height;
             x: root.base-x;
             y: root.base-y;
 
