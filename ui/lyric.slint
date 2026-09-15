@@ -6,14 +6,24 @@ export component LyricWindow inherits Window {
     background: transparent;
     always-on-top: true;
     title: "lyric-for-musicfox";
+    // 锁死窗口尺寸由 Rust set_size 控制，禁止布局引擎根据子元素 preferred-size 撑大
+    preferred-width: 0px;
+    preferred-height: 0px;
+    min-width: 0px;
+    min-height: 0px;
 
-    // —— 隐形测量元素：取文本自然宽度 ——
-    measure := Text {
-        visible: false;
-        text: "......";
-        font-size: 24px;
-        width: self.preferred-width;
-        height: self.preferred-height;
+    // —— 隐形测量容器：将 Text preferred-size 完全隔断，不传导给 Window ——
+    // Rectangle 固定 width/height 为 0 且 clip，子 Text 可自由伸展以报告 preferred-size
+    Rectangle {
+        width: 0px;
+        height: 0px;
+        clip: true;
+        measure := Text {
+            visible: false;
+            text: "......";
+            font-size: 24px;
+            overflow: clip;
+        }
     }
 
     // —— Rust 侧驱动的属性 ——
@@ -24,7 +34,7 @@ export component LyricWindow inherits Window {
     in-out property <brush> text-color;
     in-out property <brush> outline-color;
     in-out property <int> outline-width-px;
-    out property <length> lyric-text-width: measure.width;
+    out property <length> lyric-text-width: measure.preferred-width;
 
     property <length> outline-w: outline-width-px * 1px;
 
@@ -35,8 +45,12 @@ export component LyricWindow inherits Window {
     font-weight <=> measure.font-weight;
 
     // 静态排版：未超宽居中，超宽靠左对齐，超出部分由 clip 截断隐藏
-    property <length> base-x: measure.width > root.width ? 0px : (root.width - measure.width) / 2;
-    property <length> base-y: (root.height - measure.height) / 2;
+    // 使用 preferred-width 计算（measure 元素 width=0，不参与窗口布局）
+    property <length> text-natural-w: measure.preferred-width;
+    property <length> text-natural-h: measure.preferred-height;
+    property <length> display-w: min(text-natural-w, root.width);
+    property <length> base-x: text-natural-w > root.width ? 0px : (root.width - text-natural-w) / 2;
+    property <length> base-y: (root.height - text-natural-h) / 2;
     out property <bool> has-outline: outline-width-px > 0 && root.outline-color != #00000000;
 
     callback pointer-pressed();
@@ -54,9 +68,10 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: measure.width;
-            height: measure.height;
+            width: root.display-w;
+            height: root.text-natural-h;
             visible: root.has-outline;
+            overflow: clip;
             x: root.base-x + root.outline-w;
             y: root.base-y;
         }
@@ -66,9 +81,10 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: measure.width;
-            height: measure.height;
+            width: root.display-w;
+            height: root.text-natural-h;
             visible: root.has-outline;
+            overflow: clip;
             x: root.base-x - root.outline-w;
             y: root.base-y;
         }
@@ -78,9 +94,10 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: measure.width;
-            height: measure.height;
+            width: root.display-w;
+            height: root.text-natural-h;
             visible: root.has-outline;
+            overflow: clip;
             x: root.base-x;
             y: root.base-y + root.outline-w;
         }
@@ -90,9 +107,10 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: measure.width;
-            height: measure.height;
+            width: root.display-w;
+            height: root.text-natural-h;
             visible: root.has-outline;
+            overflow: clip;
             x: root.base-x;
             y: root.base-y - root.outline-w;
         }
@@ -102,9 +120,10 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: measure.width;
-            height: measure.height;
+            width: root.display-w;
+            height: root.text-natural-h;
             visible: root.has-outline;
+            overflow: clip;
             x: root.base-x + root.outline-w;
             y: root.base-y + root.outline-w;
         }
@@ -114,9 +133,10 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: measure.width;
-            height: measure.height;
+            width: root.display-w;
+            height: root.text-natural-h;
             visible: root.has-outline;
+            overflow: clip;
             x: root.base-x + root.outline-w;
             y: root.base-y - root.outline-w;
         }
@@ -126,9 +146,10 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: measure.width;
-            height: measure.height;
+            width: root.display-w;
+            height: root.text-natural-h;
             visible: root.has-outline;
+            overflow: clip;
             x: root.base-x - root.outline-w;
             y: root.base-y + root.outline-w;
         }
@@ -138,9 +159,10 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: measure.width;
-            height: measure.height;
+            width: root.display-w;
+            height: root.text-natural-h;
             visible: root.has-outline;
+            overflow: clip;
             x: root.base-x - root.outline-w;
             y: root.base-y - root.outline-w;
         }
@@ -150,9 +172,10 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: measure.width;
-            height: measure.height;
+            width: root.display-w;
+            height: root.text-natural-h;
             visible: root.has-outline;
+            overflow: clip;
             x: root.base-x - root.outline-w;
             y: root.base-y + root.outline-w;
         }
@@ -162,9 +185,10 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.outline-color;
-            width: measure.width;
-            height: measure.height;
+            width: root.display-w;
+            height: root.text-natural-h;
             visible: root.has-outline;
+            overflow: clip;
             x: root.base-x - root.outline-w;
             y: root.base-y - root.outline-w;
         }
@@ -176,8 +200,9 @@ export component LyricWindow inherits Window {
             font-family: root.font-family-name;
             font-weight: root.font-weight;
             color: root.text-color;
-            width: measure.width;
-            height: measure.height;
+            width: root.display-w;
+            height: root.text-natural-h;
+            overflow: clip;
             x: root.base-x;
             y: root.base-y;
 
